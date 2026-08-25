@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Meine Punktekarte</title>
+
+<link rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      crossorigin=""/>
+
+<style>
+  html, body {
+    height: 100%;
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  }
+
+  #map {
+    width: 100%;
+    height: 100%;
+  }
+
+  .popup {
+    min-width: 210px;
+  }
+
+  .popup h3 {
+    margin: 0 0 10px 0;
+    font-size: 17px;
+  }
+
+  .popup a {
+    display: inline-block;
+    padding: 9px 13px;
+    background: #1677ff;
+    color: white;
+    text-decoration: none;
+    border-radius: 7px;
+    font-size: 15px;
+  }
+
+  .popup a:active {
+    background: #0b5dcc;
+  }
+
+  .details {
+    margin: 8px 0 12px 0;
+    line-height: 1.55;
+    font-size: 14px;
+  }
+
+  .details div {
+    margin: 2px 0;
+  }
+
+  .info {
+    position: absolute;
+    z-index: 1000;
+    top: 12px;
+    left: 12px;
+    right: 12px;
+    background: rgba(255,255,255,.94);
+    padding: 10px 14px;
+    border-radius: 10px;
+    box-shadow: 0 2px 12px rgba(0,0,0,.18);
+    font-size: 14px;
+  }
+</style>
+</head>
+
+<body>
+
+<div class="info">📍 Meine Testpunkte</div>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        crossorigin=""></script>
+
+<script>
+const points = [
+  {
+    name: "Matera1",
+    lat: 40.6800,
+    lon: 16.6249,
+    link: "https://park4night.com/de/place/63928",
+    strom: "Ja",
+    wasser: "Ja",
+    entsorgung: "Nein",
+    kosten: "10 € / Nacht",
+    notiz: "Ruhiger Platz, Testeintrag"
+  },
+  {
+    name: "Ostuni P",
+    lat: 40.7325,
+    lon: 17.5815,
+    link: "https://park4night.com/de/place/13868",
+    strom: "Unbekannt",
+    wasser: "Ja",
+    entsorgung: "Nein",
+    kosten: "kostenlos",
+    notiz: "Testeintrag"
+  },
+  {
+    name: "Ostuni Masseria",
+    lat: 40.7722,
+    lon: 17.5839,
+    link: "https://park4night.com/de/place/418373",
+    strom: "Nein",
+    wasser: "Ja",
+    entsorgung: "Ja",
+    kosten: "15 €",
+    notiz: "Testeintrag"
+  }
+];
+
+const map = L.map("map");
+
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19,
+  attribution: '&copy; OpenStreetMap-Mitwirkende'
+}).addTo(map);
+
+const bounds = [];
+
+points.forEach(point => {
+  const marker = L.marker([point.lat, point.lon]).addTo(map);
+
+  marker.bindPopup(`
+    <div class="popup">
+      <h3>${escapeHtml(point.name)}</h3>
+      <div class="details">
+        <div>⚡ Strom: ${escapeHtml(point.strom)}</div>
+        <div>💧 Wasser: ${escapeHtml(point.wasser)}</div>
+        <div>🚿 Entsorgung: ${escapeHtml(point.entsorgung)}</div>
+        <div>💶 Kosten: ${escapeHtml(point.kosten)}</div>
+        <div>📝 ${escapeHtml(point.notiz)}</div>
+      </div>
+      <a href="${escapeAttr(point.link)}" target="_blank" rel="noopener">
+        Park4Night öffnen
+      </a>
+    </div>
+  `);
+
+  bounds.push([point.lat, point.lon]);
+});
+
+if (bounds.length === 1) {
+  map.setView(bounds[0], 14);
+} else if (bounds.length > 1) {
+  map.fitBounds(bounds, { padding: [50, 50] });
+}
+
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"']/g, c => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;"
+  }[c]));
+}
+
+function escapeAttr(text) {
+  return String(text).replace(/"/g, "&quot;");
+}
+</script>
+
+</body>
+</html>
