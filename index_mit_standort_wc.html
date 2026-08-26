@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Meine Punktekarte</title>
+
+<link rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      crossorigin=""/>
+
+<style>
+  html, body {
+    height: 100%;
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  }
+
+  #map {
+    width: 100%;
+    height: 100%;
+  }
+
+  .popup {
+    min-width: 210px;
+  }
+
+  .popup h3 {
+    margin: 0 0 10px 0;
+    font-size: 17px;
+  }
+
+  .popup a {
+    display: inline-block;
+    padding: 9px 13px;
+    background: #1677ff;
+    color: white;
+    text-decoration: none;
+    border-radius: 7px;
+    font-size: 15px;
+  }
+
+  .popup a:active {
+    background: #0b5dcc;
+  }
+
+  .details {
+    margin: 8px 0 12px 0;
+    line-height: 1.55;
+    font-size: 14px;
+  }
+
+  .details div {
+    margin: 2px 0;
+  }
+
+  .location-panel {
+    position: absolute; z-index: 1100; top: 112px; left: 12px;
+  }
+  .location-button {
+    padding: 10px 14px; background: white; color: #1677ff; border: 0;
+    border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,.18);
+    font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+  .import-panel {
+    position: absolute; z-index: 1100; top: 58px; left: 12px; right: 12px;
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  }
+  .import-button {
+    display: inline-block; padding: 10px 14px; background: white; color: #1677ff;
+    border: 0; border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,.18);
+    font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+  .import-status {
+    background: rgba(255,255,255,.94); padding: 9px 11px; border-radius: 10px;
+    box-shadow: 0 2px 12px rgba(0,0,0,.14); font-size: 13px;
+  }
+  #csvFile { display: none; }
+
+  .info {
+    position: absolute;
+    z-index: 1000;
+    top: 12px;
+    left: 12px;
+    right: 12px;
+    background: rgba(255,255,255,.94);
+    padding: 10px 14px;
+    border-radius: 10px;
+    box-shadow: 0 2px 12px rgba(0,0,0,.18);
+    font-size: 14px;
+  }
+</style>
+</head>
+
+<body>
+
+<div class="info">📍 Meine Punktekarte</div>
+<div class="location-panel">
+    <button id="locateButton" class="location-button" type="button">📍 Mein Standort</button>
+  </div>
+  <div class="import-panel">
+  <label class="import-button" for="csvFile">📂 CSV aus Dateien auswählen</label>
+  <input id="csvFile" type="file">
+  <div id="importStatus" class="import-status">3 Testpunkte geladen</div>
+</div>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        crossorigin=""></script>
+
+<script>
+let points = [
+  {
+    name: "Matera1",
+    lat: 40.6800,
+    lon: 16.6249,
+    link: "https://park4night.com/de/place/63928",
+    strom: "Ja",
+    wasser: "Ja",
+    entsorgung: "Nein",
+    kosten: "10 € / Nacht",
+    notiz: "Ruhiger Platz, Testeintrag"
+  },
+  {
+    name: "Ostuni P",
+    lat: 40.7325,
+    lon: 17.5815,
+    link: "https://park4night.com/de/place/13868",
+    strom: "Unbekannt",
+    wasser: "Ja",
+    entsorgung: "Nein",
+    kosten: "kostenlos",
+    notiz: "Testeintrag"
+  },
+  {
+    name: "Ostuni Masseria",
+    lat: 40.7722,
+    lon: 17.5839,
+    link: "https://park4night.com/de/place/418373",
+    strom: "Nein",
+    wasser: "Ja",
+    entsorgung: "Ja",
+    kosten: "15 €",
+    notiz: "Testeintrag"
+  }
+];
+
+const map = L.map("map");
+let markers = [];
+
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19,
+  attribution: '&copy; OpenStreetMap-Mitwirkende'
+}).addTo(map);
+
+function parseCSV(text) {
+  text = text.replace(/^\uFEFF/, "");
+  const lines = text.split(/\r?\n/).filter(line => line.trim() !== "");
+  return lines.map(line => {
+    const result = []; let current = ""; let quoted = false;
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        if (quoted && line[i + 1] === '"') { current += '"'; i++; }
+        else { quoted = !quoted; }
+      } else if (char === ";" && !quoted) { result.push(current); current = ""; }
+      else { current += char; }
+    }
+    result.push(current); return result;
+  });
+}
+
+function pointsFromCSV(text) {
+  const rows = parseCSV(text);
+  if (rows.length < 2) return [];
+  const headers = rows[0].map(h => h.trim());
+  return rows.slice(1).filter(r => r.some(c => c.trim() !== "")).map(row => {
+    const item = {};
+    headers.forEach((h, i) => item[h] = (row[i] || "").trim());
+    return {
+      name: item.Name || "",
+      lat: Number(String(item.Latitude || "").replace(",", ".")),
+      lon: Number(String(item.Longitude || "").replace(",", ".")),
+      link: item.Park4Night || "",
+      strom: item.Strom || "Unbekannt",
+      wasser: item.Wasser || "Unbekannt",
+      entsorgung: item.Entsorgung || "Unbekannt",
+      wcDusche: item["WC/Dusche"] || "Unbekannt",
+      kosten: item.Kosten || "",
+      notiz: item.Notiz || ""
+    };
+  }).filter(p => p.name && Number.isFinite(p.lat) && Number.isFinite(p.lon));
+}
+
+function renderPoints() {
+  markers.forEach(m => map.removeLayer(m));
+  markers = [];
+  const bounds = [];
+
+  points.forEach(point => {
+    const marker = L.marker([point.lat, point.lon]).addTo(map);
+    marker.bindPopup(`
+      <div class="popup">
+        <h3>${escapeHtml(point.name)}</h3>
+        <div class="details">
+          <div>⚡ Strom: ${escapeHtml(point.strom)}</div>
+          <div>💧 Wasser: ${escapeHtml(point.wasser)}</div>
+          <div>🚿 Entsorgung: ${escapeHtml(point.entsorgung)}</div>
+          <div>🚻 WC/Dusche: ${escapeHtml(point.wcDusche)}</div>
+          <div>💶 Kosten: ${escapeHtml(point.kosten)}</div>
+          <div>📝 ${escapeHtml(point.notiz)}</div>
+        </div>
+        <a href="${escapeAttr(point.link)}" target="_blank" rel="noopener">Park4Night öffnen</a>
+      </div>
+    `);
+    markers.push(marker);
+    bounds.push([point.lat, point.lon]);
+  });
+
+  if (bounds.length === 1) map.setView(bounds[0], 14);
+  else if (bounds.length > 1) map.fitBounds(bounds, { padding: [50, 50] });
+}
+
+document.getElementById("csvFile").addEventListener("change", event => {
+  const file = event.target.files[0];
+  if (!file) return;
+  const status = document.getElementById("importStatus");
+  status.textContent = "CSV wird geladen …";
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const imported = pointsFromCSV(reader.result);
+      if (!imported.length) throw new Error("Keine gültigen Punkte gefunden.");
+      points = imported;
+      renderPoints();
+      status.textContent = `${points.length} Punkte aus CSV geladen`;
+    } catch (e) {
+      console.error(e);
+      status.textContent = "Fehler beim Import";
+      alert("Die CSV-Datei konnte nicht gelesen werden. Bitte prüfe die Spalten.");
+    }
+  };
+  reader.onerror = () => {
+    status.textContent = "Fehler beim Lesen der Datei";
+    alert("Die CSV-Datei konnte nicht gelesen werden.");
+  };
+  reader.readAsText(file, "utf-8");
+});
+
+
+let userLocationMarker = null;
+
+document.getElementById("locateButton").addEventListener("click", () => {
+  if (!navigator.geolocation) {
+    alert("Der aktuelle Standort wird von diesem Browser nicht unterstützt.");
+    return;
+  }
+
+  const button = document.getElementById("locateButton");
+  button.textContent = "📍 Standort wird gesucht …";
+
+  navigator.geolocation.getCurrentPosition(
+    position => {
+      const lat = position.coords.latitude;
+      const lon = position.coords.longitude;
+
+      if (userLocationMarker) map.removeLayer(userLocationMarker);
+
+      userLocationMarker = L.circleMarker([lat, lon], {
+        radius: 9,
+        weight: 3,
+        fillOpacity: 0.8
+      }).addTo(map);
+
+      userLocationMarker.bindPopup("📍 Mein aktueller Standort").openPopup();
+      map.setView([lat, lon], 14);
+      button.textContent = "📍 Mein Standort";
+    },
+    error => {
+      button.textContent = "📍 Mein Standort";
+      let message = "Der Standort konnte nicht ermittelt werden.";
+      if (error.code === 1) {
+        message = "Der Zugriff auf den Standort wurde nicht erlaubt. Bitte erlaube der Punktekarte den Standortzugriff.";
+      }
+      alert(message);
+    },
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
+  );
+});
+
+renderPoints();
+
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"']/g, c => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;"
+  }[c]));
+}
+
+function escapeAttr(text) {
+  return String(text).replace(/"/g, "&quot;");
+}
+</script>
+
+</body>
+</html>
